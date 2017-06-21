@@ -18,6 +18,7 @@ import qualified TensorFlow.GenOps.Core as TF
   , zerosLike, realDiv, concat, sqrt, slice, transpose, print' )
 import qualified TensorFlow.Types as TF (ListOf((:/), Nil))
 
+import TensorFlow.Operators
 import Orbits.Simulation
 import Orbits.System
 import Orbits.Units
@@ -55,7 +56,7 @@ createSimulation initialBodies = do
   timeDelta <- TF.placeholder []
 
   -- positionDiffs[*,i,j] = 3d vector from body j to body i (first axis is x/y/z)
-  let positionDiffs = TF.expandDims positionsVar _2 `TF.sub`
+  let positionDiffs = TF.expandDims positionsVar _2 ^-
                       TF.expandDims positionsVar _1
 
       -- distance2[i,j] = squared distance between body i and body j
@@ -65,15 +66,15 @@ createSimulation initialBodies = do
       distance = TF.sqrt distance2
 
       -- unitDiffs[*,i,j] = unit vector pointing from body j toward body i
-      unitDiffs = positionDiffs `TF.realDiv` TF.expandDims distance _0
+      unitDiffs = positionDiffs ^/ TF.expandDims distance _0
 
       -- gravitational constant, as a TensorFlow scalar
       g = TF.scalar simGravitationalConstant
 
       -- accelerations'[*,i,j] = acceleration on body i due to the gravitational attraction of body j
       -- accelerations'[*,i,i] = NaN
-      accelerations' = g `TF.mul` unitDiffs `TF.mul`
-                       TF.expandDims (TF.expandDims masses _0) _2 `TF.realDiv`
+      accelerations' = g ^* unitDiffs ^*
+                       TF.expandDims (TF.expandDims masses _0) _2 ^/
                        TF.expandDims distance2 _0
 
       -- accelerations[*,i,j] = acceleration on body i due to the gravitational attraction of body j
@@ -85,31 +86,31 @@ createSimulation initialBodies = do
 
       -- newVelocities[*,i] = velocity of body i after one time step
       -- this assumes constant acceleration over the time step
-      newVelocities = velocitiesVar `TF.add` (timeDelta `TF.mul` totalAcceleration)
+      newVelocities = velocitiesVar ^+ (timeDelta ^* totalAcceleration)
 
       -- newPositions[*,i] = position of body i after one time step
-      newPositions = positionsVar `TF.add` (timeDelta `TF.mul` newVelocities)
+      newPositions = positionsVar ^+ timeDelta ^* newVelocities
 
       -- massProd[i,j] = (mass of body i) * (mass of body j)
-      massProd = TF.expandDims masses _0 `TF.mul`
+      massProd = TF.expandDims masses _0 ^*
                  TF.expandDims masses _1
 
       -- kineticEnergies[i] = 2 * (kinetic energy of body i)
-      kineticEnergies = masses `TF.mul` TF.sum (TF.square velocitiesVar) _0
+      kineticEnergies = masses ^* TF.sum (TF.square velocitiesVar) _0
 
       -- kineticEnergy = total kinetic energy in the system
-      kineticEnergy = TF.scalar 0.5 `TF.mul` TF.sum kineticEnergies _0
+      kineticEnergy = TF.scalar 0.5 ^* TF.sum kineticEnergies _0
 
       -- gravitationalPotentials'[i,j] = gravitational potential between bodies i and j
       -- gravitationalPotentials'[i,i] = NaN
-      gravitationalPotentials' = g `TF.mul` massProd `TF.realDiv` distance
+      gravitationalPotentials' = g ^* massProd ^/ distance
 
       -- gravitationalPotentials[i,j] = gravitational potential between bodies i and j
       -- gravitationalPotentials[i,i] = 0
       gravitationalPotentials = TF.matrixSetDiag gravitationalPotentials' (TF.zerosLike kineticEnergies)
 
       -- gravitationalPotential = total gravitational potential of the system
-      gravitationalPotential = TF.scalar 0.5 `TF.mul`
+      gravitationalPotential = TF.scalar 0.5 ^*
                                TF.sum  gravitationalPotentials (int32Vector [0, 1])
 
       -- energyOutput = total energy of the system
@@ -153,31 +154,3 @@ _1 = TF.scalar 1
 -- | Convenient shorthand for 'int32Scalar 2'
 _2 :: TF.Tensor TF.Build Int32
 _2 = TF.scalar 2
-
-
-infixl 6 ^+, ^-
-infixl 7 ^*, ^/
-
-(^+) :: TF.OneOf `[Complex Double, Complex Float, Int16, Int32, Int64, Int8, Word16, Word8, Double, Float]` t
-     => TF.Tensor v'1 t
-     -> TF.Tensor v'2 t
-     -> TF.Tensor TF.Build t
-a ^+ b = a `TF.add` b
-
-(^-) :: TF.OneOf `[Complex Double, Complex Float, Int16, Int32, Int64, Int8, Word16, Word8, Double, Float]` t
-     => TF.Tensor v'1 t
-     -> TF.Tensor v'2 t
-     -> TF.Tensor TF.Build t
-a ^- b = a `TF.sub` b
-
-(^*) :: TF.OneOf `[Complex Double, Complex Float, Int16, Int32, Int64, Int8, Word16, Word8, Double, Float]` t
-     => TF.Tensor v'1 t
-     -> TF.Tensor v'2 t
-     -> TF.Tensor TF.Build t
-a ^* b = a `TF.mul` b
-
-(^/) :: TF.OneOf `[Complex Double, Complex Float, Int16, Int32, Int64, Int8, Word16, Word8, Double, Float]` t
-     => TF.Tensor v'1 t
-     -> TF.Tensor v'2 t
-     -> TF.Tensor TF.Build t
-a ^/ b = a `TF.realDiv` b
