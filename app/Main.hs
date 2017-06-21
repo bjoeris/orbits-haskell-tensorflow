@@ -55,9 +55,9 @@ main = TF.runSession $ do
 
     sim <- TF.build $ createSimulation $ system0^.bodies
 
-    let dt = 0.01 *~ day
+    let dt = 0.1 *~ day
         outputPeriod = 10 *~ day
-        totalTime = 100 *~ year
+        totalTime = 10 *~ year
         totalSteps = (totalTime D./ dt)^.inUnit D.one
         stepsPerOutput = ceiling $ (outputPeriod D./ dt)^.inUnit D.one
         numOutputs = ceiling $ totalSteps / fromIntegral stepsPerOutput
